@@ -10,16 +10,17 @@ start_date=$(date -d "-3 months" +%Y-%m-%dT%H:%M:%SZ)
 
 # Function to fetch push events for all projects and branches starting with the specified prefix
 fetch_push_events() {
-    project_id=$1
-    events_url="${GITLAB_API_URL}/projects/${project_id}/events?after=${start_date}&action=push"
-    push_events=$(curl -s --header "PRIVATE-TOKEN: ${PRIVATE_TOKEN}" "${events_url}")
+    local project_id="$1"
+    local branch_prefix="$2"
+    local events_url="${GITLAB_API_URL}/projects/${project_id}/events?after=${start_date}&action=push"
+    local push_events=$(curl -s --header "PRIVATE-TOKEN: ${PRIVATE_TOKEN}" "${events_url}")
     if [ -z "$push_events" ]; then
         echo "Failed to fetch push events for project ${project_id}. Empty response."
         return
     fi
-    branches=$(echo "${push_events}" | jq -r '[.[] | select(.target_branch | startswith($branch_prefix)) | .target_branch] | unique | .[]')
+    local branches=$(echo "${push_events}" | jq -r '[.[] | select(.target_branch | startswith($branch_prefix)) | .target_branch] | unique | .[]')
     for branch in $branches; do
-        filtered_events=$(echo "${push_events}" | jq --arg branch "$branch" 'select(.target_branch == $branch)')
+        local filtered_events=$(echo "${push_events}" | jq --arg branch "$branch" 'select(.target_branch == $branch)')
         if [ -z "$filtered_events" ]; then
             echo "No push events found for branch ${branch} in project ${project_id}."
             continue
@@ -30,7 +31,7 @@ fetch_push_events() {
 
 # Function to fetch all projects
 fetch_all_projects() {
-    projects_url="${GITLAB_API_URL}/projects"
+    local projects_url="${GITLAB_API_URL}/projects"
     curl -s --header "PRIVATE-TOKEN: ${PRIVATE_TOKEN}" "${projects_url}"
 }
 
@@ -39,8 +40,8 @@ projects=$(fetch_all_projects)
 
 # Iterate through projects and fetch push events for branches starting with the specified prefix
 for project in $(echo "${projects}" | jq -r '.[] | @base64'); do
-    project_id=$(echo "${project}" | base64 --decode | jq -r '.id')
-    project_name=$(echo "${project}" | base64 --decode | jq -r '.name_with_namespace')
+    local project_id=$(echo "${project}" | base64 --decode | jq -r '.id')
+    local project_name=$(echo "${project}" | base64 --decode | jq -r '.name_with_namespace')
     echo "Processing project: ${project_name}"
-    fetch_push_events "${project_id}"
+    fetch_push_events "${project_id}" "${BRANCH_PREFIX}"
 done
