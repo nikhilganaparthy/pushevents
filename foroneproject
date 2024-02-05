@@ -3,38 +3,44 @@
 # GitLab API endpoint and access token
 GITLAB_API_URL="https://gitlab.example.com/api/v4"
 PRIVATE_TOKEN="your_private_token_here"
-PROJECT_ID="your_project_id_here"  # Specify the project ID here
 BRANCH_PREFIX="RELEASE"
 
 # Calculate start date for the last 3 months
 start_date=$(date -d "-3 months" +%Y-%m-%dT%H:%M:%SZ)
 
-# Function to fetch push events for the specified project and branch prefix
+# Function to fetch push events for all projects and branches starting with the specified prefix
 fetch_push_events() {
-    events_url="${GITLAB_API_URL}/projects/${PROJECT_ID}/events?after=${start_date}&action=push"
+    project_id=$1
+    events_url="${GITLAB_API_URL}/projects/${project_id}/events?after=${start_date}&action=push"
     push_events=$(curl -s --header "PRIVATE-TOKEN: ${PRIVATE_TOKEN}" "${events_url}")
     if [ -z "$push_events" ]; then
-        echo "Failed to fetch push events. Empty response."
-        exit 1
+        echo "Failed to fetch push events for project ${project_id}. Empty response."
+        return
     fi
-    filtered_events=$(echo "${push_events}" | jq --arg branch_prefix "${BRANCH_PREFIX}" '.[] | select(.target_branch | startswith($branch_prefix))')
-    if [ -z "$filtered_events" ]; then
-        echo "No push events found for branches starting with '${BRANCH_PREFIX}'."
-        exit 1
-    fi
-    echo "${filtered_events}"
+    branches=$(echo "${push_events}" | jq -r '[.[] | select(.target_branch | startswith($branch_prefix)) | .target_branch] | unique | .[]')
+    for branch in $branches; do
+        filtered_events=$(echo "${push_events}" | jq --arg branch "$branch" 'select(.target_branch == $branch)')
+        if [ -z "$filtered_events" ]; then
+            echo "No push events found for branch ${branch} in project ${project_id}."
+            continue
+        fi
+        echo "${filtered_events}"
+    done
 }
 
-# Fetch push events for the specified project and branch prefix
-push_events=$(fetch_push_events)
+# Function to fetch all projects
+fetch_all_projects() {
+    projects_url="${GITLAB_API_URL}/projects"
+    curl -s --header "PRIVATE-TOKEN: ${PRIVATE_TOKEN}" "${projects_url}"
+}
 
-# Extract unique developers and their IDs
-developers=$(echo "${push_events}" | jq -r '[.[] | .author.username as $username | .author.id as $id | {username: $username, id: $id}] | unique_by(.id) | .[]')
+# Fetch all projects
+projects=$(fetch_all_projects)
 
-# Count the number of developers
-developer_count=$(echo "${developers}" | jq -s 'length')
-
-echo "Total developers who performed push events to branches starting with '${BRANCH_PREFIX}': ${developer_count}"
-
-# Display developers and their IDs
-echo "${developers}"
+# Iterate through projects and fetch push events for branches starting with the specified prefix
+for project in $(echo "${projects}" | jq -r '.[] | @base64'); do
+    project_id=$(echo "${project}" | base64 --decode | jq -r '.id')
+    project_name=$(echo "${project}" | base64 --decode | jq -r '.name_with_namespace')
+    echo "Processing project: ${project_name}"
+    fetch_push_events "${project_id}"
+done
