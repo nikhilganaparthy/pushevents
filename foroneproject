@@ -3,6 +3,7 @@
 # GitLab API endpoint and access token
 GITLAB_API_URL="https://gitlab.example.com/api/v4"
 PRIVATE_TOKEN="your_private_token_here"
+BRANCH_PREFIX="RELEASE"
 
 # Calculate start date for the last 3 months
 start_date=$(date -d "-3 months" +%Y-%m-%dT%H:%M:%SZ)
@@ -17,7 +18,7 @@ fetch_push_events() {
         echo "Failed to fetch push events for project ${project_id}. Empty response."
         return
     fi
-    local branches=$(echo "${push_events}" | jq -r '[.[] | select(.target_branch | startswith($branch_prefix)) | .target_branch] | unique | .[]')
+    local branches=$(echo "${push_events}" | jq -r '[.[] | select(.target_branch | startswith("'"$branch_prefix"'")) | .target_branch] | unique | .[]')
     for branch in $branches; do
         local filtered_events=$(echo "${push_events}" | jq --arg branch "$branch" 'select(.target_branch == $branch)')
         if [ -z "$filtered_events" ]; then
@@ -35,7 +36,6 @@ if [ $# -eq 0 ]; then
 fi
 
 project_id="$1"
-BRANCH_PREFIX="RELEASE"
 
 echo "Fetching push events for project with ID ${project_id}..."
 fetch_push_events "${project_id}" "${BRANCH_PREFIX}"
