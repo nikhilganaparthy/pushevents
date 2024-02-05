@@ -3,24 +3,23 @@
 # GitLab API endpoint and access token
 GITLAB_API_URL="https://gitlab.example.com/api/v4"
 PRIVATE_TOKEN="your_private_token_here"
-BRANCH_PREFIX="RELEASE"
 
 # Calculate start date for the last 3 months
 start_date=$(date -d "-3 months" +%Y-%m-%dT%H:%M:%SZ)
 
 # Function to fetch push events for a specific project and branches starting with the specified prefix
 fetch_push_events() {
-    project_id="$1"
-    branch_prefix="$2"
-    events_url="${GITLAB_API_URL}/projects/${project_id}/events?after=${start_date}&action=push"
-    push_events=$(curl -s --header "PRIVATE-TOKEN: ${PRIVATE_TOKEN}" "${events_url}")
+    local project_id="$1"
+    local branch_prefix="$2"
+    local events_url="${GITLAB_API_URL}/projects/${project_id}/events?after=${start_date}&action=push"
+    local push_events=$(curl -s --header "PRIVATE-TOKEN: ${PRIVATE_TOKEN}" "${events_url}")
     if [ -z "$push_events" ]; then
         echo "Failed to fetch push events for project ${project_id}. Empty response."
         return
     fi
-    branches=$(echo "${push_events}" | jq -r '[.[] | select(.target_branch | startswith($branch_prefix)) | .target_branch] | unique | .[]')
+    local branches=$(echo "${push_events}" | jq -r '[.[] | select(.target_branch | startswith($branch_prefix)) | .target_branch] | unique | .[]')
     for branch in $branches; do
-        filtered_events=$(echo "${push_events}" | jq --arg branch "$branch" 'select(.target_branch == $branch)')
+        local filtered_events=$(echo "${push_events}" | jq --arg branch "$branch" 'select(.target_branch == $branch)')
         if [ -z "$filtered_events" ]; then
             echo "No push events found for branch ${branch} in project ${project_id}."
             continue
@@ -36,6 +35,7 @@ if [ $# -eq 0 ]; then
 fi
 
 project_id="$1"
+BRANCH_PREFIX="RELEASE"
 
 echo "Fetching push events for project with ID ${project_id}..."
 fetch_push_events "${project_id}" "${BRANCH_PREFIX}"
