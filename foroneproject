@@ -12,8 +12,17 @@ start_date=$(date -d "-3 months" +%Y-%m-%dT%H:%M:%SZ)
 # Function to fetch push events for the specified project and branch prefix
 fetch_push_events() {
     events_url="${GITLAB_API_URL}/projects/${PROJECT_ID}/events?after=${start_date}&action=push"
-    push_events=$(curl -s --header "PRIVATE-TOKEN: ${PRIVATE_TOKEN}" "${events_url}" | jq --arg branch_prefix "${BRANCH_PREFIX}" '.[] | select(.target_branch | startswith($branch_prefix))')
-    echo "${push_events}"
+    push_events=$(curl -s --header "PRIVATE-TOKEN: ${PRIVATE_TOKEN}" "${events_url}")
+    if [ -z "$push_events" ]; then
+        echo "Failed to fetch push events. Empty response."
+        exit 1
+    fi
+    filtered_events=$(echo "${push_events}" | jq --arg branch_prefix "${BRANCH_PREFIX}" '.[] | select(.target_branch | startswith($branch_prefix))')
+    if [ -z "$filtered_events" ]; then
+        echo "No push events found for branches starting with '${BRANCH_PREFIX}'."
+        exit 1
+    fi
+    echo "${filtered_events}"
 }
 
 # Fetch push events for the specified project and branch prefix
